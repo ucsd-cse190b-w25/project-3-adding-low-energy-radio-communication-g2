@@ -15,7 +15,7 @@ void timer_init(TIM_TypeDef* timer)
 	timer->CNT = 0;//making the timer counter 0
 	timer->SR = 0;//making the interrupt flag 0
 	RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN; //adding the clock for TIM2
-	timer->PSC = 4000-1; // Making the clock frequency 1ms
+	timer->PSC = 8000-1; // Making the clock frequency 1ms
 	timer->ARR = 49; // Setting the timer interrupt to 50ms
 	timer->DIER|=TIM_DIER_UIE;
 	NVIC_EnableIRQ(TIM2_IRQn);

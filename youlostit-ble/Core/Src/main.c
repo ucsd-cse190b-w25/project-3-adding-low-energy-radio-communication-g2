@@ -23,8 +23,12 @@
 
 #include <stdlib.h>
 #include "leds.h"
+#include "timer.h"
 #include "i2c.h"
 #include "lsm6dsl.h"
+
+#define BLE_MAX_PACKET_SIZE 20  // Typical BLE packet size
+#define TAG_NAME "PrivTag"
 
 int dataAvailable = 0;
 
@@ -44,6 +48,26 @@ uint8_t arr[] = {0b10, 0b01, 0b10, 0b01, 0b00, 0b00, 0b00, 0b10, 0b01, 0b01, 0b0
 volatile int counter = 0;
 volatile int arr_counter = 0;  // Counter for which part of the array we are displaying
 volatile uint8_t minute_counter = 0; // counter for how many minutes have gone by
+int bool = 1;
+
+void sendMissingAlert(int seconds) {
+    char message[50];  // Buffer for the formatted string
+    snprintf(message, sizeof(message), "PrivTag has been missing for %d seconds", seconds);
+
+    int message_len = strlen(message);
+    int offset = 0;
+
+    while (offset < message_len) {
+        int chunk_size = (message_len - offset > BLE_MAX_PACKET_SIZE) ? BLE_MAX_PACKET_SIZE : (message_len - offset);
+
+        // Send each chunk as a standalone notification
+        updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, chunk_size, (uint8_t*)&message[offset]);
+
+        offset += chunk_size;
+        HAL_Delay(50);  // Small delay to allow BLE module to process
+    }
+}
+
 
 void TIM2_IRQHandler(void)
 {
@@ -91,7 +115,7 @@ int main(void)
   leds_init();
   timer_init(TIM2);
   timer_set_ms(TIM2, 50);
-  printf("Print works");
+  HAL_Delay(500);
   i2c_init();
   lsm6dsl_init();
 
@@ -126,24 +150,20 @@ int main(void)
 	          if (abs(x_scaled - last_x) <= STABLE_THRESHOLD && abs(y_scaled - last_y) <= STABLE_THRESHOLD && abs(z_scaled - last_z) <= STABLE_THRESHOLD)
 	          {
 	              stable_counter++;
-	              if (counter >= MINUTE_COUNT)
+	              if (counter >= MINUTE_COUNT && bool && counter%200==0)
 	              {
-	              	if(minute_counter==0){
-	                  	arr_counter = 0;
-	                  }
-	                  minute_counter+=1;
-	                  uint8_t segment1 = (minute_counter >> 6) & 0x3; // Bits 7-8
-	                  uint8_t segment2 = (minute_counter >> 4) & 0x3; // Bits 5-6
-	                  uint8_t segment3 = (minute_counter >> 2) & 0x3; // Bits 3-4
-	                  uint8_t segment4 = minute_counter & 0x3;
-	                  arr[12] = segment1;
-	                  arr[13] = segment2;
-	                  arr[14] = segment3;
-	                  arr[15] = segment4;
-	                  counter = 0; //reset counter so it doesn't keep printing
+	            	  leds_set(2);
+	            	  unsigned char test_str[] = "youlostit BLE test";
+	            	  //updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
 
+	            	  bool = 0;
+	            	  int missing_seconds = counter / 20;
+	            	  sendMissingAlert(missing_seconds);
 
-	                  printf("Device has not moved for %d minute(s)\n", minute_counter);
+	              }
+	              else if(counter >= MINUTE_COUNT && !bool && counter%200!=0)
+	              {
+	              	    bool = 1;
 
 	              }
 	          }
@@ -152,7 +172,7 @@ int main(void)
 	          	leds_set(0);
 	          	arr_counter = 0;
 	          	minute_counter = 0;
-	              counter = 0; // Reset the counter when the thing moves
+	            counter = 0; // Reset the counter when the thing moves
 	          }
 
 	          // Updating the compares
@@ -162,16 +182,21 @@ int main(void)
 
 	          if(minute_counter>0){
 	          	leds_set(arr[arr_counter]);  // set LEDs based off current pattern
+
 	          }
 	  //Old code end
+
 	  if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
 	    catchBLE();
-	  }else{
+	  }
+	  /*
+	  else{
 		  HAL_Delay(1000);
 		  // Send a string to the NORDIC UART service, remember to not include the newline
 		  unsigned char test_str[] = "youlostit BLE test";
 		  updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
 	  }
+	  */
 	  // Wait for interrupt, only uncomment if low power is needed
 	  //__WFI();
   }
