@@ -22,6 +22,9 @@
 #include "ble.h"
 
 #include <stdlib.h>
+#include "leds.h"
+#include "i2c.h"
+#include "lsm6dsl.h"
 
 int dataAvailable = 0;
 
@@ -30,6 +33,37 @@ SPI_HandleTypeDef hspi3;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI3_Init(void);
+
+//Old code
+#define ARR_LENGTH 16
+#define MINUTE_COUNT 1200  // 1 minute worth of 50ms intervals
+
+// Preamble: 10 01 10 01
+// Rahul's Student ID (0596): 00 00 00 10 01 01 01 00
+uint8_t arr[] = {0b10, 0b01, 0b10, 0b01, 0b00, 0b00, 0b00, 0b10, 0b01, 0b01, 0b01, 0b00, 0b00, 0b00, 0b00, 0b00}; // Wrote the sequence into an array
+volatile int counter = 0;
+volatile int arr_counter = 0;  // Counter for which part of the array we are displaying
+volatile uint8_t minute_counter = 0; // counter for how many minutes have gone by
+
+void TIM2_IRQHandler(void)
+{
+
+    if (TIM2->SR & TIM_SR_UIF) {  // check if interrupt status reg != 0
+        TIM2->SR &= ~TIM_SR_UIF;  // turn it off
+
+        arr_counter = (arr_counter + 1) % ARR_LENGTH;  // increment counter
+
+        counter += 1;
+    }
+}
+int _write(int file, char *ptr, int len) {
+    int i = 0;
+    for (i = 0; i < len; i++) {
+        ITM_SendChar(*ptr++);
+    }
+    return len;
+}
+//Old code end
 
 /**
   * @brief  The application entry point.
@@ -53,13 +87,83 @@ int main(void)
   HAL_GPIO_WritePin(BLE_RESET_GPIO_Port,BLE_RESET_Pin,GPIO_PIN_SET);
 
   ble_init();
+  //Old code
+  leds_init();
+  timer_init(TIM2);
+  timer_set_ms(TIM2, 50);
+  printf("Print works");
+  i2c_init();
+  lsm6dsl_init();
 
+  int16_t x, y, z;
+  int16_t last_x = 0, last_y = 0, last_z = 0;
+  int stable_counter = 0;  // Count how many iterations values remain within threshold
+  const int STABLE_THRESHOLD = 160;
+
+  int _write(int file, char *ptr, int len) {
+      int i = 0;
+      for (i = 0; i < len; i++) {
+          ITM_SendChar(*ptr++);
+      }
+      return len;
+  }
+  //Old code end
   HAL_Delay(10);
 
   uint8_t nonDiscoverable = 0;
 
   while (1)
   {
+	  //Old code
+	  lsm6dsl_read_xyz(&x, &y, &z);
+
+	          // Convert values to match the scale
+	          int16_t x_scaled = x / 16;
+	          int16_t y_scaled = y / 16;
+	          int16_t z_scaled = z / 16;
+
+	          // Check if the change is within the stable threshold
+	          if (abs(x_scaled - last_x) <= STABLE_THRESHOLD && abs(y_scaled - last_y) <= STABLE_THRESHOLD && abs(z_scaled - last_z) <= STABLE_THRESHOLD)
+	          {
+	              stable_counter++;
+	              if (counter >= MINUTE_COUNT)
+	              {
+	              	if(minute_counter==0){
+	                  	arr_counter = 0;
+	                  }
+	                  minute_counter+=1;
+	                  uint8_t segment1 = (minute_counter >> 6) & 0x3; // Bits 7-8
+	                  uint8_t segment2 = (minute_counter >> 4) & 0x3; // Bits 5-6
+	                  uint8_t segment3 = (minute_counter >> 2) & 0x3; // Bits 3-4
+	                  uint8_t segment4 = minute_counter & 0x3;
+	                  arr[12] = segment1;
+	                  arr[13] = segment2;
+	                  arr[14] = segment3;
+	                  arr[15] = segment4;
+	                  counter = 0; //reset counter so it doesn't keep printing
+
+
+	                  printf("Device has not moved for %d minute(s)\n", minute_counter);
+
+	              }
+	          }
+	          else
+	          {
+	          	leds_set(0);
+	          	arr_counter = 0;
+	          	minute_counter = 0;
+	              counter = 0; // Reset the counter when the thing moves
+	          }
+
+	          // Updating the compares
+	          last_x = x_scaled;
+	          last_y = y_scaled;
+	          last_z = z_scaled;
+
+	          if(minute_counter>0){
+	          	leds_set(arr[arr_counter]);  // set LEDs based off current pattern
+	          }
+	  //Old code end
 	  if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
 	    catchBLE();
 	  }else{
