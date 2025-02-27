@@ -152,6 +152,7 @@ int main(void)
 	              stable_counter++;
 	              if (counter >= MINUTE_COUNT && bool && counter%200==0)
 	              {
+	            	  setDiscoverability(1);
 	            	  leds_set(2);
 	            	  unsigned char test_str[] = "youlostit BLE test";
 	            	  //updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
@@ -169,6 +170,7 @@ int main(void)
 	          }
 	          else
 	          {
+	        	disconnectBLE();
 	          	leds_set(0);
 	          	arr_counter = 0;
 	          	minute_counter = 0;
