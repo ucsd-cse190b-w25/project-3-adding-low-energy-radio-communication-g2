@@ -26,6 +26,7 @@
 #include "timer.h"
 #include "i2c.h"
 #include "lsm6dsl.h"
+#include "stm32l4xx_hal_pwr.h"
 
 #define BLE_MAX_PACKET_SIZE 20  // Typical BLE packet size
 #define TAG_NAME "PrivTag"
@@ -135,7 +136,7 @@ int main(void)
   HAL_Delay(10);
 
   uint8_t nonDiscoverable = 0;
-
+  disconnectBLE();
   while (1)
   {
 	  //Old code
@@ -167,6 +168,13 @@ int main(void)
 	              	    bool = 1;
 
 	              }
+	              //Enter Sleep Mode if BLE is not active
+	              if (!HAL_GPIO_ReadPin(BLE_INT_GPIO_Port, BLE_INT_Pin))
+	                      {
+	                          HAL_SuspendTick();  // Stop SysTick timer to save power
+	                          HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
+	                          HAL_ResumeTick();   // Resume SysTick when waking up
+	                      }
 	          }
 	          else
 	          {
