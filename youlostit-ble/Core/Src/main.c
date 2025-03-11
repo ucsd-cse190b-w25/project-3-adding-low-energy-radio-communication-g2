@@ -41,7 +41,8 @@ static void MX_SPI3_Init(void);
 
 //Old code
 #define ARR_LENGTH 16
-#define MINUTE_COUNT 1200  // 1 minute worth of 50ms intervals
+//#define MINUTE_COUNT 1200  // 1 minute worth of 50ms intervals
+#define MINUTE_COUNT 100
 
 // Preamble: 10 01 10 01
 // Rahul's Student ID (0596): 00 00 00 10 01 01 01 00
@@ -207,8 +208,18 @@ int main(void)
 		  updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
 	  }
 	  */
+
+	  /*
+	   * Turn off interrupts
+	   *
+	   */
+	  __disable_irq();
+	  NVIC_EnableIRQ(TIM2_IRQn);
+
 	  // Wait for interrupt, only uncomment if low power is needed
-	  //__WFI();
+	  __asm volatile ("wfi");
+
+	  __enable_irq();
   }
 }
 
