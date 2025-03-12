@@ -42,11 +42,10 @@ static void MX_SPI3_Init(void);
 //Old code
 #define ARR_LENGTH 16
 //#define MINUTE_COUNT 1200  // 1 minute worth of 50ms intervals
-#define MINUTE_COUNT 100
+#define MINUTE_COUNT 10
 
 // Preamble: 10 01 10 01
 // Rahul's Student ID (0596): 00 00 00 10 01 01 01 00
-uint8_t arr[] = {0b10, 0b01, 0b10, 0b01, 0b00, 0b00, 0b00, 0b10, 0b01, 0b01, 0b01, 0b00, 0b00, 0b00, 0b00, 0b00}; // Wrote the sequence into an array
 volatile int counter = 0;
 volatile int arr_counter = 0;  // Counter for which part of the array we are displaying
 volatile uint8_t minute_counter = 0; // counter for how many minutes have gone by
@@ -80,6 +79,7 @@ void TIM2_IRQHandler(void)
 		arr_counter = (arr_counter + 1) % ARR_LENGTH;  // increment counter
 
 		counter += 1;
+		SystemClock_Config();
 	}
 }
 int _write(int file, char *ptr, int len) {
@@ -116,7 +116,7 @@ int main(void)
 	//Old code
 	leds_init();
 	timer_init(TIM2);
-	timer_set_ms(TIM2, 50);
+	timer_set_ms(TIM2, 1000);
 	HAL_Delay(500);
 	i2c_init();
 	lsm6dsl_init();
@@ -154,7 +154,7 @@ int main(void)
 		if (abs(x_scaled - last_x) <= STABLE_THRESHOLD && abs(y_scaled - last_y) <= STABLE_THRESHOLD && abs(z_scaled - last_z) <= STABLE_THRESHOLD)
 		{
 			stable_counter++;
-			if (counter >= MINUTE_COUNT && bool && counter%200==0)
+			if (counter >= MINUTE_COUNT && bool && counter%10==0)
 			{
 				setDiscoverability(1);
 				leds_set(2);
@@ -162,7 +162,7 @@ int main(void)
 				//updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
 
 				bool = 0;
-				int missing_seconds = counter / 20;
+				int missing_seconds = counter;
 				sendMissingAlert(missing_seconds);
 
 			}
@@ -186,9 +186,6 @@ int main(void)
 		last_y = y_scaled;
 		last_z = z_scaled;
 
-		if(minute_counter>0){
-			leds_set(arr[arr_counter]);  // set LEDs based off current pattern
-		}
 		//Old code end
 
 		if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
@@ -212,11 +209,10 @@ int main(void)
 				| RCC_APB1ENR1_I2C1EN); // I2C
 		RCC->APB2ENR &= ~RCC_APB2ENR_SPI1EN;        // SPI
 		RCC->AHB2ENR &= ~(RCC_AHB2ENR_GPIOAEN | RCC_AHB2ENR_GPIOBEN);
-		HAL_SuspendTick();  // Stop SysTick timer to save power
-
+		//HAL_SuspendTick();  // Stop SysTick timer to save power
+		HAL_PWR_EnterSTOPMode(PWR_MAINREGULATOR_ON, PWR_STOPENTRY_WFI);
 		// Wait for interrupt, only uncomment if low power is needed
 		__asm volatile ("wfi");
-
 		HAL_ResumeTick();   // Resume SysTick when waking up
 		RCC->AHB2ENR |= (RCC_AHB2ENR_GPIOAEN | RCC_AHB2ENR_GPIOBEN);
 		RCC->APB1ENR1 |= (RCC_APB1ENR1_USART2EN   // UART
