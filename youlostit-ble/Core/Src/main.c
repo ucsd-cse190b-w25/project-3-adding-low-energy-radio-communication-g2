@@ -40,7 +40,7 @@ static void MX_GPIO_Init(void);
 static void MX_SPI3_Init(void);
 
 //Old code
-#define TIME_PERIOD 50
+#define TIME_PERIOD 200
 #define MINUTE_MS 10000 // # of ms in a minute, should be 60000 unless if scaling down for debugging
 #define MINUTE_COUNT (MINUTE_MS / TIME_PERIOD)
 #define SEC_COUNT (1000 / TIME_PERIOD)
@@ -123,13 +123,6 @@ int main(void)
 	int stable_counter = 0;  // Count how many iterations values remain within threshold
 	const int STABLE_THRESHOLD = 160;
 
-//	int _write(int file, char *ptr, int len) {
-//		int i = 0;
-//		for (i = 0; i < len; i++) {
-//			ITM_SendChar(*ptr++);
-//		}
-//		return len;
-//	}
 	//Old code end
 	HAL_Delay(10);
 
