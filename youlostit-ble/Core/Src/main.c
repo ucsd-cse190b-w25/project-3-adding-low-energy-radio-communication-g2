@@ -23,7 +23,7 @@
 
 #include <stdlib.h>
 #include "leds.h"
-#include "timer.h"
+#include "lptim.h"
 #include "i2c.h"
 #include "lsm6dsl.h"
 #include "stm32l4xx_hal_pwr.h"
@@ -40,14 +40,14 @@ static void MX_GPIO_Init(void);
 static void MX_SPI3_Init(void);
 
 //Old code
-#define ARR_LENGTH 16
-//#define MINUTE_COUNT 1200  // 1 minute worth of 50ms intervals
-#define MINUTE_COUNT 10
+#define TIME_PERIOD 50
+#define MINUTE_MS 10000 // # of ms in a minute, should be 60000 unless if scaling down for debugging
+#define MINUTE_COUNT (MINUTE_MS / TIME_PERIOD)
+#define SEC_COUNT (1000 / TIME_PERIOD)
 
 // Preamble: 10 01 10 01
 // Rahul's Student ID (0596): 00 00 00 10 01 01 01 00
 volatile int counter = 0;
-volatile int arr_counter = 0;  // Counter for which part of the array we are displaying
 volatile uint8_t minute_counter = 0; // counter for how many minutes have gone by
 int bool = 1;
 
@@ -69,18 +69,13 @@ void sendMissingAlert(int seconds) {
 	}
 }
 
-
-void TIM2_IRQHandler(void)
+void LPTIM1_IRQHandler(void)
 {
-
-	if (TIM2->SR & TIM_SR_UIF) {  // check if interrupt status reg != 0
-		TIM2->SR &= ~TIM_SR_UIF;  // turn it off
-
-		arr_counter = (arr_counter + 1) % ARR_LENGTH;  // increment counter
-
-		counter += 1;
-		SystemClock_Config();
-	}
+	if (LPTIM1->ISR & LPTIM_ISR_ARRM) {
+        LPTIM1->ICR |= LPTIM_ICR_ARRMCF;  // Clear interrupt flag
+        // Your custom wakeup or callback code here
+        counter += 1;
+    }
 }
 int _write(int file, char *ptr, int len) {
 	int i = 0;
@@ -115,8 +110,8 @@ int main(void)
 	ble_init();
 	//Old code
 	leds_init();
-	timer_init(TIM2);
-	timer_set_ms(TIM2, 1000);
+	lptimer_init(LPTIM1);
+	lptimer_set_ms(LPTIM1, TIME_PERIOD);
 	HAL_Delay(500);
 	i2c_init();
 	lsm6dsl_init();
@@ -128,13 +123,13 @@ int main(void)
 	int stable_counter = 0;  // Count how many iterations values remain within threshold
 	const int STABLE_THRESHOLD = 160;
 
-	int _write(int file, char *ptr, int len) {
-		int i = 0;
-		for (i = 0; i < len; i++) {
-			ITM_SendChar(*ptr++);
-		}
-		return len;
-	}
+//	int _write(int file, char *ptr, int len) {
+//		int i = 0;
+//		for (i = 0; i < len; i++) {
+//			ITM_SendChar(*ptr++);
+//		}
+//		return len;
+//	}
 	//Old code end
 	HAL_Delay(10);
 
@@ -154,29 +149,26 @@ int main(void)
 		if (abs(x_scaled - last_x) <= STABLE_THRESHOLD && abs(y_scaled - last_y) <= STABLE_THRESHOLD && abs(z_scaled - last_z) <= STABLE_THRESHOLD)
 		{
 			stable_counter++;
-			if (counter >= MINUTE_COUNT && bool && counter%10==0)
+			if (counter >= MINUTE_COUNT && bool && counter%(SEC_COUNT * 10)==0)
 			{
 				setDiscoverability(1);
 				leds_set(2);
-				unsigned char test_str[] = "youlostit BLE test";
 				//updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
 
 				bool = 0;
-				int missing_seconds = counter;
+				int missing_seconds = counter / SEC_COUNT;
 				sendMissingAlert(missing_seconds);
 
 			}
-			else if(counter >= MINUTE_COUNT && !bool && counter%200!=0)
+			else if(counter >= MINUTE_COUNT && !bool && counter%(SEC_COUNT * 10)!=0)
 			{
 				bool = 1;
-
 			}
 		}
 		else
 		{
 			disconnectBLE();
 			leds_set(0);
-			arr_counter = 0;
 			minute_counter = 0;
 			counter = 0; // Reset the counter when the thing moves
 		}
@@ -191,14 +183,6 @@ int main(void)
 		if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
 			catchBLE();
 		}
-		/*
-	  else{
-		  HAL_Delay(1000);
-		  // Send a string to the NORDIC UART service, remember to not include the newline
-		  unsigned char test_str[] = "youlostit BLE test";
-		  updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
-	  }
-		 */
 
 		/*
 		 * Turn off interrupts
@@ -209,10 +193,11 @@ int main(void)
 				| RCC_APB1ENR1_I2C1EN); // I2C
 		RCC->APB2ENR &= ~RCC_APB2ENR_SPI1EN;        // SPI
 		RCC->AHB2ENR &= ~(RCC_AHB2ENR_GPIOAEN | RCC_AHB2ENR_GPIOBEN);
-		//HAL_SuspendTick();  // Stop SysTick timer to save power
+		HAL_SuspendTick();  // Stop SysTick timer to save power
+
+		__HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
 		HAL_PWR_EnterSTOPMode(PWR_MAINREGULATOR_ON, PWR_STOPENTRY_WFI);
-		// Wait for interrupt, only uncomment if low power is needed
-		__asm volatile ("wfi");
+
 		HAL_ResumeTick();   // Resume SysTick when waking up
 		RCC->AHB2ENR |= (RCC_AHB2ENR_GPIOAEN | RCC_AHB2ENR_GPIOBEN);
 		RCC->APB1ENR1 |= (RCC_APB1ENR1_USART2EN   // UART
