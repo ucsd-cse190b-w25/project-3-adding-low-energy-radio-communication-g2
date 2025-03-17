@@ -41,7 +41,7 @@ static void MX_SPI3_Init(void);
 
 //Old code
 #define TIME_PERIOD 200
-#define MINUTE_MS 10000 // # of ms in a minute, should be 60000 unless if scaling down for debugging
+#define MINUTE_MS 60000 // # of ms in a minute, should be 60000 unless if scaling down for debugging
 #define MINUTE_COUNT (MINUTE_MS / TIME_PERIOD)
 #define SEC_COUNT (1000 / TIME_PERIOD)
 
@@ -130,8 +130,10 @@ int main(void)
 	disconnectBLE();
 	while (1)
 	{
+		RCC->APB1ENR1 |= (RCC_APB1ENR1_I2C1EN); // I2C
 		//Old code
 		lsm6dsl_read_xyz(&x, &y, &z);
+		RCC->APB1ENR1 &= ~(RCC_APB1ENR1_I2C1EN); // I2C
 
 		// Convert values to match the scale
 		int16_t x_scaled = x / 16;
@@ -182,19 +184,15 @@ int main(void)
 		 *
 		 */
 
-		RCC->APB1ENR1 &= ~(RCC_APB1ENR1_USART2EN   // UART
-				| RCC_APB1ENR1_I2C1EN); // I2C
 		RCC->APB2ENR &= ~RCC_APB2ENR_SPI1EN;        // SPI
 		RCC->AHB2ENR &= ~(RCC_AHB2ENR_GPIOAEN | RCC_AHB2ENR_GPIOBEN);
 		HAL_SuspendTick();  // Stop SysTick timer to save power
-
+//		__WFI();
 		__HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
 		HAL_PWR_EnterSTOPMode(PWR_MAINREGULATOR_ON, PWR_STOPENTRY_WFI);
 
 		HAL_ResumeTick();   // Resume SysTick when waking up
 		RCC->AHB2ENR |= (RCC_AHB2ENR_GPIOAEN | RCC_AHB2ENR_GPIOBEN);
-		RCC->APB1ENR1 |= (RCC_APB1ENR1_USART2EN   // UART
-				| RCC_APB1ENR1_I2C1EN); // I2C
 		RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;        // SPI
 	}
 }
